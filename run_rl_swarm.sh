@@ -157,17 +157,9 @@ echo_green ">> Done!"
 # fi
 export HUGGINGFACE_ACCESS_TOKEN="None"
 
-echo -en $GREEN_TEXT
-read -p ">> Enter the name of the model you want to use in huggingface repo/name format, or press [Enter] to use the default model. " MODEL_NAME
-echo -en $RESET_TEXT
-
-# Only export MODEL_NAME if user provided a non-empty value
-if [ -n "$MODEL_NAME" ]; then
-    export MODEL_NAME
-    echo_green ">> Using model: $MODEL_NAME"
-else
-    echo_green ">> Using default model from config"
-fi
+# 自动选择模型，无需手动输入
+export MODEL_NAME="Qwen/Qwen3-0.6B"
+echo_green ">> Using model: $MODEL_NAME"
 
 echo_green ">> Good luck in the swarm!"
 echo_blue ">> And remember to star the repo on GitHub! --> https://github.com/gensyn-ai/rl-swarm"
