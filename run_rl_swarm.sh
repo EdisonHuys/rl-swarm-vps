@@ -101,6 +101,7 @@ EOF
 mkdir -p "$ROOT/logs"
 
 # 跳过 modal-login，直接写入信息
+# Your ORG_ID is set to: 32b8810d-ed3c-4136-a1e7-8a9892d724e5
 export ORG_ID="0xd8875f272d8Ce09Ae37D6F1B9cC79d88a24AA2c7"
 export HUGGINGFACE_ACCESS_TOKEN="None"
 
