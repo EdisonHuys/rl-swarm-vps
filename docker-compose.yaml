@@ -72,6 +72,7 @@ services:
     environment:
       - HF_TOKEN=${HF_TOKEN}
       - GENSYN_RESET_CONFIG=${GENSYN_RESET_CONFIG}
+    restart: always
     deploy:
       resources:
         reservations:
@@ -79,4 +80,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-              restart: always
