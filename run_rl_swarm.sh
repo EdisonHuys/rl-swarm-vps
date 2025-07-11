@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$PWD
 
 # GenRL Swarm version to use
-GENRL_SWARM_TAG="v0.1.1"
+GENRL_TAG="v0.1.1"
 
 export IDENTITY_PATH
 export GENSYN_RESET_CONFIG
@@ -98,180 +98,125 @@ EOF
 # Create logs directory if it doesn't exist
 mkdir -p "$ROOT/logs"
 
-# 跳过 modal-login，直接使用预配置的用户信息
 if [ "$CONNECT_TO_TESTNET" = true ]; then
-    # 检查是否存在预配置的用户数据
-    if [ -f "user/modal-login/userData.json" ] && [ -f "user/modal-login/userApiKey.json" ]; then
-        echo_green ">> 使用预配置的用户数据跳过登录流程..."
-        # Your ORG_ID is set to: 32b8810d-ed3c-4136-a1e7-8a9892d724e5
-        # 从预配置文件中读取 ORG_ID
-        ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' user/modal-login/userData.json)
-        echo "Your ORG_ID is set to: $ORG_ID"
-        
-        # 检查API密钥是否已激活
-        API_ACTIVATED=$(grep -o '"activated": true' user/modal-login/userApiKey.json | head -1)
-        if [ -n "$API_ACTIVATED" ]; then
-            echo_green ">> API密钥已激活，跳过激活等待..."
-        else
-            echo_red ">> 警告：API密钥未激活，可能需要手动激活"
+    # Run modal_login server.
+    echo "Please login to create an Ethereum Server Wallet"
+    cd modal-login
+    # Check if the yarn command exists; if not, install Yarn.
+
+    # Node.js + NVM setup
+    if ! command -v node > /dev/null 2>&1; then
+        echo "Node.js not found. Installing NVM and latest Node.js..."
+        export NVM_DIR="$HOME/.nvm"
+        if [ ! -d "$NVM_DIR" ]; then
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
         fi
-        
-        # 设置环境变量
-        export ORG_ID
-        export HUGGINGFACE_ACCESS_TOKEN="None"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+        nvm install node
     else
-        echo_red ">> 未找到预配置的用户数据文件，使用默认ORG_ID"
-        export ORG_ID="0xd8875f272d8Ce09Ae37D6F1B9cC79d88a24AA2c7"
-        export HUGGINGFACE_ACCESS_TOKEN="None"
+        echo "Node.js is already installed: $(node -v)"
     fi
-else
-    # 如果不需要连接测试网，设置默认值
-    export ORG_ID="0xd8875f272d8Ce09Ae37D6F1B9cC79d88a24AA2c7"
-    export HUGGINGFACE_ACCESS_TOKEN="None"
+
+    if ! command -v yarn > /dev/null 2>&1; then
+        # Detect Ubuntu (including WSL Ubuntu) and install Yarn accordingly
+        if grep -qi "ubuntu" /etc/os-release 2> /dev/null || uname -r | grep -qi "microsoft"; then
+            echo "Detected Ubuntu or WSL Ubuntu. Installing Yarn via apt..."
+            curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+            echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+            sudo apt update && sudo apt install -y yarn
+        else
+            echo "Yarn not found. Installing Yarn globally with npm (no profile edits)…"
+            # This lands in $NVM_DIR/versions/node/<ver>/bin which is already on PATH
+            npm install -g --silent yarn
+        fi
+    fi
+
+    ENV_FILE="$ROOT"/modal-login/.env
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS version
+        sed -i '' "3s/.*/SMART_CONTRACT_ADDRESS=$SWARM_CONTRACT/" "$ENV_FILE"
+    else
+        # Linux version
+        sed -i "3s/.*/SMART_CONTRACT_ADDRESS=$SWARM_CONTRACT/" "$ENV_FILE"
+    fi
+
+
+    # Docker image already builds it, no need to again.
+    if [ -z "$DOCKER" ]; then
+        yarn install --immutable
+        echo "Building server"
+        yarn build > "$ROOT/logs/yarn.log" 2>&1
+    fi
+    yarn start >> "$ROOT/logs/yarn.log" 2>&1 & # Run in background and log output
+
+    SERVER_PID=$!  # Store the process ID
+    echo "Started server process: $SERVER_PID"
+    sleep 5
+
+    # Try to open the URL in the default browser
+    if [ -z "$DOCKER" ]; then
+        if open http://localhost:3000 2> /dev/null; then
+            echo_green ">> Successfully opened http://localhost:3000 in your default browser."
+        else
+            echo ">> Failed to open http://localhost:3000. Please open it manually."
+        fi
+    else
+        echo_green ">> Please open http://localhost:3000 in your host browser."
+    fi
+
+    cd ..
+
+    echo_green ">> Waiting for modal userData.json to be created..."
+    while [ ! -f "modal-login/temp-data/userData.json" ]; do
+        sleep 5  # Wait for 5 seconds before checking again
+    done
+    echo "Found userData.json. Proceeding..."
+
+    ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
+    echo "Your ORG_ID is set to: $ORG_ID"
+
+    # Wait until the API key is activated by the client
+    echo "Waiting for API key to become activated..."
+    while true; do
+        STATUS=$(curl -s "http://localhost:3000/api/get-api-key-status?orgId=$ORG_ID")
+        if [[ "$STATUS" == "activated" ]]; then
+            echo "API key is activated! Proceeding..."
+            break
+        else
+            echo "Waiting for API key to be activated..."
+            sleep 5
+        fi
+    done
 fi
-
-# 原有 modal-login 登录流程已被注释掉
-# if [ "$CONNECT_TO_TESTNET" = true ]; then
-#     # Run modal_login server.
-#     echo "Please login to create an Ethereum Server Wallet"
-#     cd modal-login
-#     # Check if the yarn command exists; if not, install Yarn.
-
-#     # Node.js + NVM setup
-#     if ! command -v node > /dev/null 2>&1; then
-#         echo "Node.js not found. Installing NVM and latest Node.js..."
-#         export NVM_DIR="$HOME/.nvm"
-#         if [ ! -d "$NVM_DIR" ]; then
-#             curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-#         fi
-#         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-#         [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-#         nvm install node
-#     else
-#         echo "Node.js is already installed: $(node -v)"
-#     fi
-
-#     if ! command -v yarn > /dev/null 2>&1; then
-#         # Detect Ubuntu (including WSL Ubuntu) and install Yarn accordingly
-#         if grep -qi "ubuntu" /etc/os-release 2> /dev/null || uname -r | grep -qi "microsoft"; then
-#             echo "Detected Ubuntu or WSL Ubuntu. Installing Yarn via apt..."
-#             curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-#             echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-#             sudo apt update && sudo apt install -y yarn
-#         else
-#             echo "Yarn not found. Installing Yarn globally with npm (no profile edits)…"
-#             # This lands in $NVM_DIR/versions/node/<ver>/bin which is already on PATH
-#             npm install -g --silent yarn
-#         fi
-#     fi
-
-#     ENV_FILE="$ROOT"/modal-login/.env
-#     if [[ "$OSTYPE" == "darwin"* ]]; then
-#         # macOS version
-#         sed -i '' "3s/.*/SMART_CONTRACT_ADDRESS=$SWARM_CONTRACT/" "$ENV_FILE"
-#     else
-#         # Linux version
-#         sed -i "3s/.*/SMART_CONTRACT_ADDRESS=$SWARM_CONTRACT/" "$ENV_FILE"
-#     fi
-
-
-#     # Docker image already builds it, no need to again.
-#     if [ -z "$DOCKER" ]; then
-#         yarn install --immutable
-#         echo "Building server"
-#         yarn build > "$ROOT/logs/yarn.log" 2>&1
-#     fi
-#     yarn start >> "$ROOT/logs/yarn.log" 2>&1 & # Run in background and log output
-
-#     SERVER_PID=$!  # Store the process ID
-#     echo "Started server process: $SERVER_PID"
-#     sleep 5
-
-#     # Try to open the URL in the default browser
-#     if [ -z "$DOCKER" ]; then
-#         if open http://localhost:3000 2> /dev/null; then
-#             echo_green ">> Successfully opened http://localhost:3000 in your default browser."
-#         else
-#             echo ">> Failed to open http://localhost:3000. Please open it manually."
-#         fi
-#     else
-#         echo_green ">> Please open http://localhost:3000 in your host browser."
-#     fi
-
-#     cd ..
-
-#     echo_green ">> Waiting for modal userData.json to be created..."
-#     while [ ! -f "modal-login/temp-data/userData.json" ]; do
-#         sleep 5  # Wait for 5 seconds before checking again
-#     done
-#     echo "Found userData.json. Proceeding..."
-
-#     ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' modal-login/temp-data/userData.json)
-#     echo "Your ORG_ID is set to: $ORG_ID"
-
-#     # Wait until the API key is activated by the client
-#     echo "Waiting for API key to become activated..."
-#     while true; do
-#         STATUS=$(curl -s "http://localhost:3000/api/get-api-key-status?orgId=$ORG_ID")
-#         if [[ "$STATUS" == "activated" ]]; then
-#             echo "API key is activated! Proceeding..."
-#             break
-#         else
-#             echo "Waiting for API key to be activated..."
-#             sleep 5
-#         fi
-#     done
-# fi
 
 echo_green ">> Getting requirements..."
 pip install --upgrade pip
 
-# Clone GenRL repository to user's working directory
-echo_green ">> Initializing and updating GenRL..."
-if [ ! -d "$ROOT/genrl-swarm" ]; then
-    git clone --depth=1 --branch "$GENRL_SWARM_TAG" https://github.com/gensyn-ai/genrl-swarm.git "$ROOT/genrl-swarm"
-else
-    # Check if we are on the correct tag
-    cd "$ROOT/genrl-swarm"
-    CURRENT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "unknown")
-    if [ "$CURRENT_TAG" != "$GENRL_SWARM_TAG" ]; then
-        echo_green ">> Updating genrl-swarm to tag $GENRL_SWARM_TAG..."
-        git fetch --tags
-        git checkout "$GENRL_SWARM_TAG"
-        git pull origin "$GENRL_SWARM_TAG"
-    fi
-    cd "$ROOT"
-fi
-
-echo_green ">> Installing GenRL."
-if [ -d "$ROOT/genrl-swarm" ]; then
-    cd "$ROOT/genrl-swarm"
-    pip install -e .[examples]
-    cd "$ROOT"
-else
-    echo_red "Error: genrl-swarm submodule not found at $ROOT/genrl-swarm"
-    exit 1
-fi
+# echo_green ">> Installing GenRL..."
+pip install gensyn-genrl==0.1.4
+pip install reasoning-gym>=0.1.20 # for reasoning gym env
+pip install trl # for grpo config, will be deprecated soon
+pip install hivemind@git+https://github.com/gensyn-ai/hivemind@639c964a8019de63135a2594663b5bec8e5356dd # We need the latest, 1.1.11 is broken
 
 
 if [ ! -d "$ROOT/configs" ]; then
     mkdir "$ROOT/configs"
-fi
-
+fi  
 if [ -f "$ROOT/configs/rg-swarm.yaml" ]; then
     # Use cmp -s for a silent comparison. If different, backup and copy.
-    if ! cmp -s "$ROOT/genrl-swarm/recipes/rgym/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml"; then
+    if ! cmp -s "$ROOT/rgym_exp/config/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml"; then
         if [ -z "$GENSYN_RESET_CONFIG" ]; then
             echo_green ">> Found differences in rg-swarm.yaml. If you would like to reset to the default, set GENSYN_RESET_CONFIG to a non-empty value."
         else
             echo_green ">> Found differences in rg-swarm.yaml. Backing up existing config."
             mv "$ROOT/configs/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml.bak"
-            cp "$ROOT/genrl-swarm/recipes/rgym/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml"
+            cp "$ROOT/rgym_exp/config/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml"
         fi
     fi
 else
     # If the config doesn't exist, just copy it.
-    cp "$ROOT/genrl-swarm/recipes/rgym/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml"
+    cp "$ROOT/rgym_exp/config/rg-swarm.yaml" "$ROOT/configs/rg-swarm.yaml"
 fi
 
 if [ -n "$DOCKER" ]; then
@@ -281,34 +226,38 @@ fi
 
 echo_green ">> Done!"
 
-# 跳过 Hugging Face 上传交互，直接设置为 None
-# HF_TOKEN=${HF_TOKEN:-""}
-# if [ -n "${HF_TOKEN}" ]; then # Check if HF_TOKEN is already set and use if so. Else give user a prompt to choose.
-#     HUGGINGFACE_ACCESS_TOKEN=${HF_TOKEN}
-# else
-#     echo -en $GREEN_TEXT
-#     read -p ">> Would you like to push models you train in the RL swarm to the Hugging Face Hub? [y/N] " yn
-#     echo -en $RESET_TEXT
-#     yn=${yn:-N} # Default to "N" if the user presses Enter
-#     case $yn in
-#         [Yy]*) read -p "Enter your Hugging Face access token: " HUGGINGFACE_ACCESS_TOKEN ;;
-#         [Nn]*) HUGGINGFACE_ACCESS_TOKEN="None" ;;
-#         *) echo ">>> No answer was given, so NO models will be pushed to Hugging Face Hub" && HUGGINGFACE_ACCESS_TOKEN="None" ;;
-#     esac
-# fi
-export HUGGINGFACE_ACCESS_TOKEN="None"
+HF_TOKEN=${HF_TOKEN:-""}
+if [ -n "${HF_TOKEN}" ]; then # Check if HF_TOKEN is already set and use if so. Else give user a prompt to choose.
+    HUGGINGFACE_ACCESS_TOKEN=${HF_TOKEN}
+else
+    echo -en $GREEN_TEXT
+    read -p ">> Would you like to push models you train in the RL swarm to the Hugging Face Hub? [y/N] " yn
+    echo -en $RESET_TEXT
+    yn=${yn:-N} # Default to "N" if the user presses Enter
+    case $yn in
+        [Yy]*) read -p "Enter your Hugging Face access token: " HUGGINGFACE_ACCESS_TOKEN ;;
+        [Nn]*) HUGGINGFACE_ACCESS_TOKEN="None" ;;
+        *) echo ">>> No answer was given, so NO models will be pushed to Hugging Face Hub" && HUGGINGFACE_ACCESS_TOKEN="None" ;;
+    esac
+fi
 
-# 强制设置模型名称
-MODEL_NAME="Qwen/Qwen3-0.6B"
-export MODEL_NAME
-echo_green ">> Using model: $MODEL_NAME"
-echo_green ">> Models will not be pushed to Hugging Face Hub"
+echo -en $GREEN_TEXT
+read -p ">> Enter the name of the model you want to use in huggingface repo/name format, or press [Enter] to use the default model. " MODEL_NAME
+echo -en $RESET_TEXT
+
+# Only export MODEL_NAME if user provided a non-empty value
+if [ -n "$MODEL_NAME" ]; then
+    export MODEL_NAME
+    echo_green ">> Using model: $MODEL_NAME"
+else
+    echo_green ">> Using default model from config"
+fi
 
 echo_green ">> Good luck in the swarm!"
 echo_blue ">> And remember to star the repo on GitHub! --> https://github.com/gensyn-ai/rl-swarm"
 
-python "$ROOT/genrl-swarm/src/genrl_swarm/runner/swarm_launcher.py" \
-    --config-path "$ROOT/configs" \
-    --config-name "rg-swarm.yaml"
+python -m rgym_exp.runner.swarm_launcher \
+    --config-path "$ROOT/rgym_exp/config" \
+    --config-name "rg-swarm.yaml" 
 
-wait
+wait  # Keep script running until Ctrl+C

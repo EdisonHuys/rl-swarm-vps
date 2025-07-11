@@ -48,9 +48,6 @@ RUN ./setup_python.sh
 COPY ./containerfiles/swarm-node/install_pip.sh ./install_pip.sh
 RUN ./install_pip.sh
 
-# === 新增：提前clone genrl-swarm仓库 ===
-RUN git clone --depth=1 --branch v0.1.0 https://github.com/gensyn-ai/genrl.git /home/gensyn/rl_swarm/genrl-swarm
-
 ENV PATH="/home/gensyn/.pyenv/shims:/home/gensyn/.pyenv/bin:$NVM_DIR/versions/node/v${NODE_VERSION}/bin/:${PATH}"
 
 COPY --chown=gensyn ./modal-login /home/gensyn/rl_swarm/modal-login
