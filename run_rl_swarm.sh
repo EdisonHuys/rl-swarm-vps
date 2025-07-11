@@ -103,7 +103,7 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
     # 检查是否存在预配置的用户数据
     if [ -f "user/modal-login/userData.json" ] && [ -f "user/modal-login/userApiKey.json" ]; then
         echo_green ">> 使用预配置的用户数据跳过登录流程..."
-        
+        # Your ORG_ID is set to: 32b8810d-ed3c-4136-a1e7-8a9892d724e5
         # 从预配置文件中读取 ORG_ID
         ORG_ID=$(awk 'BEGIN { FS = "\"" } !/^[ \t]*[{}]/ { print $(NF - 1); exit }' user/modal-login/userData.json)
         echo "Your ORG_ID is set to: $ORG_ID"
