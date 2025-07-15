@@ -5,7 +5,7 @@ set -euo pipefail
 # 配置参数
 RESTART_DELAY=30                  # 重启延迟时间（秒）
 CHECK_INTERVAL=10                 # 检查间隔时间（秒）
-LOG_FILE="/home/gensyn/rl_swarm/logs/auto_monitor.log"  # 日志文件路径
+LOG_FILE="${HOME}/rl-swarm-vps/logs/auto_monitor.log"  # 日志文件路径
 PID_FILE="/home/gensyn/rl_swarm/training.pid"           # 进程 PID 文件路径
 
 # 颜色输出设置
@@ -31,10 +31,10 @@ log_important() {
 }
 
 # 颜色输出函数（使用 stdbuf 确保非缓冲输出）
-echo_green() { stdbuf -oL echo -e "${GREEN}$1${RESET}" | tee -a "$LOG_FILE"; }
-echo_blue() { stdbuf -oL echo -e "${BLUE}$1${RESET}" | tee -a "$LOG_FILE"; }
-echo_red() { stdbuf -oL echo -e "${RED}$1${RESET}" | tee -a "$LOG_FILE"; log_important "$1"; }
-echo_yellow() { stdbuf -oL echo -e "${YELLOW}$1${RESET}" | tee -a "$LOG_FILE"; log_important "$1"; }
+echo_green() { echo -e "${GREEN}$1${RESET}" | tee -a "$LOG_FILE"; }
+echo_blue() { echo -e "${BLUE}$1${RESET}" | tee -a "$LOG_FILE"; }
+echo_red() { echo -e "${RED}$1${RESET}" | tee -a "$LOG_FILE"; log_important "$1"; }
+echo_yellow() { echo -e "${YELLOW}$1${RESET}" | tee -a "$LOG_FILE"; log_important "$1"; }
 
 # 清理函数：处理脚本退出时的清理工作
 cleanup() {
@@ -99,7 +99,7 @@ start_training() {
     
     # 尝试启动 run_rl_swarm.sh，最多重试 3 次
     for i in {1..3}; do
-        stdbuf -oL ./run_rl_swarm.sh 2>&1 | tee -a "$LOG_FILE" &
+        ./run_rl_swarm.sh 2>&1 | tee -a "$LOG_FILE" &
         local pid=$!
         echo "$pid" > "$PID_FILE"
         echo_green "✅ 训练进程已启动，PID: $pid"
