@@ -5,12 +5,8 @@ set -euo pipefail
 # 配置参数
 RESTART_DELAY=30                  # 重启延迟时间（秒）
 CHECK_INTERVAL=10                 # 检查间隔时间（秒）
-LOG_FILE="./user/logs/auto_monitor.log"  # 日志文件路径
-PID_FILE="./training.pid"           # 进程 PID 文件路径
-
-# 默认参数配置
-DEFAULT_HF_PUSH="N"               # 默认不推送模型到 Hugging Face
-DEFAULT_MODEL_NAME="Qwen/Qwen3-0.6B"  # 默认模型名称
+LOG_FILE="/home/gensyn/rl_swarm/logs/auto_monitor.log"  # 日志文件路径
+PID_FILE="/home/gensyn/rl_swarm/training.pid"           # 进程 PID 文件路径
 
 # 颜色输出设置
 GREEN="\033[32m"                  # 绿色，用于成功信息
@@ -82,15 +78,24 @@ is_process_running() {
 start_training() {
     echo_blue "🚀 启动 RL Swarm 训练 (Docker 环境)..."
     
-    # 设置环境变量（与 run_rl_swarm.sh 一致）
-    export CPU_ONLY=1
-    export HF_HUB_DOWNLOAD_TIMEOUT=120
+    # 设置环境变量（与 Dockerfile 和 run_rl_swarm.sh 一致）
+    #export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+    export OMP_NUM_THREADS=8
+    export MKL_NUM_THREADS=8
+    #export PYTORCH_ENABLE_MPS_FALLBACK=1
+    #export CPU_ONLY=1
+    #export HF_HUB_DOWNLOAD_TIMEOUT=300
+    export HF_DATASETS_CACHE="/home/gensyn/rl_swarm/.cache/huggingface/datasets"
+    export HF_MODELS_CACHE="/home/gensyn/rl_swarm/.cache/huggingface/transformers"
     export CONNECT_TO_TESTNET=true
     export SWARM_CONTRACT="0xFaD7C5e93f28257429569B854151A1B8DCD404c2"
     export HUGGINGFACE_ACCESS_TOKEN="None"
-    export MODEL_NAME="$DEFAULT_MODEL_NAME"
-    export IDENTITY_PATH="./swarm.pem"
     export GENSYN_RESET_CONFIG=""
+    export WANDB_MODE=disabled
+    
+    # 确保缓存目录存在并设置权限
+    mkdir -p "$HF_DATASETS_CACHE" "$HF_MODELS_CACHE"
+    chmod -R 777 "$HF_DATASETS_CACHE" "$HF_MODELS_CACHE"
     
     # 尝试启动 run_rl_swarm.sh，最多重试 3 次
     for i in {1..3}; do
