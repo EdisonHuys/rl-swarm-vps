@@ -80,8 +80,8 @@ start_training() {
     
     # 设置环境变量（与 Dockerfile 和 run_rl_swarm.sh 一致）
     #export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
-    export OMP_NUM_THREADS=8
-    export MKL_NUM_THREADS=8
+    export OMP_NUM_THREADS=6
+    export MKL_NUM_THREADS=6
     #export PYTORCH_ENABLE_MPS_FALLBACK=1
     #export CPU_ONLY=1
     #export HF_HUB_DOWNLOAD_TIMEOUT=300
