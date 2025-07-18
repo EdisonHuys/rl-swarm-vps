@@ -1,0 +1,86 @@
+[2025-07-10 13:58:07,969][matplotlib.font_manager][INFO] - generated new fontManager
+[2025-07-10 13:58:44,954][genrl_swarm.logging_utils.global_defs][INFO] - Reasoning Gym Data Manager initialized with config: genrl-swarm/src/genrl_swarm/examples/rgym/datasets.yaml
+[2025-07-10 13:58:44,956][genrl_swarm.logging_utils.global_defs][INFO] - Loaded composite dataset with 1000 samples
+[2025-07-10 13:58:44,957][genrl_swarm.logging_utils.global_defs][INFO] - Train samples: 2, Eval samples: 0
+[2025-07-10 13:58:44,957][genrl_swarm.logging_utils.global_defs][INFO] - Dataset weights: arc_1d: 1, basic_arithmetic: 1, base_conversion: 1, bf: 1, binary_matrix: 1, calendar_arithmetic: 1, decimal_arithmetic: 1, fraction_simplification: 1, propositional_logic: 1
+[2025-07-10 14:00:44,109][matplotlib.font_manager][INFO] - generated new fontManager
+[2025-07-10 14:04:46,840][matplotlib.font_manager][INFO] - generated new fontManager
+[2025-07-10 14:05:19,032][genrl_swarm.logging_utils.global_defs][INFO] - Reasoning Gym Data Manager initialized with config: genrl-swarm/src/genrl_swarm/examples/rgym/datasets.yaml
+[2025-07-10 14:05:19,038][genrl_swarm.logging_utils.global_defs][INFO] - Loaded composite dataset with 1000 samples
+[2025-07-10 14:05:19,039][genrl_swarm.logging_utils.global_defs][INFO] - Train samples: 2, Eval samples: 0
+[2025-07-10 14:05:19,040][genrl_swarm.logging_utils.global_defs][INFO] - Dataset weights: arc_1d: 1, basic_arithmetic: 1, base_conversion: 1, bf: 1, binary_matrix: 1, calendar_arithmetic: 1, decimal_arithmetic: 1, fraction_simplification: 1, propositional_logic: 1
+[2025-07-10 14:05:25,037][genrl_swarm.logging_utils.global_defs][INFO] - ✅ Connected to Gensyn Testnet
+[2025-07-10 14:05:31,850][genrl_swarm.logging_utils.global_defs][INFO] - 🐱 Hello 🐈 [enormous lithe narwhal] 🦮 [QmSsUJD641dGKPuuifN3U1Gfv2kyA7AVxXZkoQrFTVKvEg]!
+[2025-07-10 14:05:31,861][genrl_swarm.logging_utils.global_defs][INFO] - bootnodes: ['/ip4/38.101.215.15/tcp/30011/p2p/QmQ2gEXoPJg6iMBSUFWGzAabS2VhnzuS782Y637hGjfsRJ', '/ip4/38.101.215.15/tcp/30012/p2p/QmWhiaLrx3HRZfgXc2i7KW5nMUNK7P9tRc71yFJdGEZKkC', '/ip4/38.101.215.15/tcp/30013/p2p/QmQa1SCfYTxx7RvU7qJJRo79Zm1RAwPpkeLueDVJuBBmFp']
+[2025-07-10 14:05:31,864][genrl_swarm.logging_utils.global_defs][INFO] - Using Model: Qwen/Qwen3-0.6B
+[2025-07-10 14:05:32,018][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8320/1000000.
+[2025-07-10 14:30:16,264][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8325
+[2025-07-10 14:30:16,276][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8325/1000000.
+[2025-07-10 14:58:20,900][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8330
+[2025-07-10 14:58:20,906][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8330/1000000.
+[2025-07-10 15:21:38,124][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8335
+[2025-07-10 15:21:38,136][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8335/1000000.
+[2025-07-10 15:47:39,819][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8340
+[2025-07-10 15:47:39,844][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8340/1000000.
+[2025-07-10 16:10:07,996][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8345
+[2025-07-10 16:10:08,003][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8345/1000000.
+[2025-07-10 16:31:45,803][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8349
+[2025-07-10 16:31:45,807][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8349/1000000.
+[2025-07-10 16:57:37,540][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8354
+[2025-07-10 16:57:37,547][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8354/1000000.
+[2025-07-10 17:25:38,095][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8360
+[2025-07-10 17:25:38,102][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8360/1000000.
+[2025-07-10 17:47:20,774][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8364
+[2025-07-10 17:47:20,780][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8364/1000000.
+[2025-07-10 18:11:00,758][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8369
+[2025-07-10 18:11:00,764][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8369/1000000.
+[2025-07-10 18:31:41,444][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8373
+[2025-07-10 18:31:41,448][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8373/1000000.
+[2025-07-10 18:53:19,249][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8377
+[2025-07-10 18:53:19,258][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8377/1000000.
+[2025-07-10 19:14:05,565][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8381
+[2025-07-10 19:14:05,577][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8381/1000000.
+[2025-07-10 19:38:24,050][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8386
+[2025-07-10 19:38:24,055][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8386/1000000.
+[2025-07-10 20:00:41,423][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8391
+[2025-07-10 20:00:41,428][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8391/1000000.
+[2025-07-10 20:30:52,169][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8397
+[2025-07-10 20:30:52,178][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8397/1000000.
+[2025-07-10 20:53:54,360][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8401
+[2025-07-10 20:53:54,362][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8401/1000000.
+[2025-07-10 21:16:52,548][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8406
+[2025-07-10 21:16:52,571][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8406/1000000.
+[2025-07-10 21:35:48,199][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8410
+[2025-07-10 21:35:48,203][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8410/1000000.
+[2025-07-10 21:58:09,905][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8414
+[2025-07-10 21:58:09,908][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8414/1000000.
+[2025-07-10 22:20:01,461][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8418
+[2025-07-10 22:20:01,465][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8418/1000000.
+[2025-07-10 22:40:30,488][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8423
+[2025-07-10 22:40:30,491][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8423/1000000.
+[2025-07-10 23:01:07,144][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8427
+[2025-07-10 23:01:07,150][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8427/1000000.
+[2025-07-10 23:25:51,335][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8432
+[2025-07-10 23:25:51,346][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8432/1000000.
+[2025-07-10 23:44:10,610][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8435
+[2025-07-10 23:44:10,612][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8435/1000000.
+[2025-07-11 00:01:03,508][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8439
+[2025-07-11 00:01:03,513][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8439/1000000.
+[2025-07-11 00:20:28,166][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8443
+[2025-07-11 00:20:28,169][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8443/1000000.
+[2025-07-11 00:40:59,687][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8447
+[2025-07-11 00:40:59,689][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8447/1000000.
+[2025-07-11 01:02:50,846][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8451
+[2025-07-11 01:02:50,865][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8451/1000000.
+[2025-07-11 01:22:32,946][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8455
+[2025-07-11 01:22:32,952][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8455/1000000.
+[2025-07-11 01:42:11,938][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8459
+[2025-07-11 01:42:11,943][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8459/1000000.
+[2025-07-11 02:03:35,662][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8463
+[2025-07-11 02:03:35,666][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8463/1000000.
+[2025-07-11 02:23:39,420][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8467
+[2025-07-11 02:23:39,427][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8467/1000000.
+[2025-07-11 02:42:48,329][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8471
+[2025-07-11 02:42:48,338][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8471/1000000.
+[2025-07-11 03:01:27,734][genrl_swarm.logging_utils.global_defs][INFO] - 🐝 Joining round: 8475
+[2025-07-11 03:01:27,746][genrl_swarm.logging_utils.global_defs][INFO] - Starting round: 8475/1000000.
