@@ -24,10 +24,10 @@ MODULE.bazel.lock
 **/.direnv
 .tmux.conf
 
-user/
-user/keys/
-user/logs/
-user/models/
+# user/
+# user/keys/
+# user/logs/
+# user/models/
 
 configs/
 genrl-swarm/
