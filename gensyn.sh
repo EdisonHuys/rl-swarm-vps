@@ -81,17 +81,40 @@ get_cpu_usage() {
     # 使用 top 命令获取 CPU 使用率，兼容不同系统的输出格式
     local cpu_usage
     
-    # 尝试多种方式获取CPU使用率
-    if command -v top &> /dev/null; then
-        # 方法1: 使用 top 命令
-        cpu_usage=$(top -bn1 | grep -i "cpu(s)" | head -1 | awk '{print $2}' | sed 's/%us,//' | cut -d'%' -f1 | cut -d'.' -f1)
-        
-        # 如果上面的方法失败，尝试其他格式
-        if [[ ! "$cpu_usage" =~ ^[0-9]+$ ]] || [ "$cpu_usage" -gt 100 ]; then
-            # 方法2: 使用 vmstat
+    # 检测操作系统类型
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS 系统
+        if command -v top &> /dev/null; then
+            # macOS 的 top 命令输出格式不同
+            cpu_usage=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | sed 's/%//' | cut -d'.' -f1)
+        else
+            cpu_usage=0
+        fi
+    else
+        # Linux 系统
+        # 尝试多种方式获取CPU使用率
+        if command -v top &> /dev/null; then
+            # 方法1: 使用 top 命令
+            cpu_usage=$(top -bn1 | grep -i "cpu(s)" | head -1 | awk '{print $2}' | sed 's/%us,//' | cut -d'%' -f1 | cut -d'.' -f1)
+            
+            # 如果上面的方法失败，尝试其他格式
+            if [[ ! "$cpu_usage" =~ ^[0-9]+$ ]] || [ "$cpu_usage" -gt 100 ]; then
+                # 方法2: 使用 vmstat
+                if command -v vmstat &> /dev/null; then
+                    cpu_usage=$(vmstat 1 2 | tail -1 | awk '{print 100-$15}')
+                # 方法3: 使用 /proc/loadavg 估算
+                elif [ -f /proc/loadavg ]; then
+                    local load_avg
+                    load_avg=$(cat /proc/loadavg | awk '{print $1}')
+                    cpu_usage=$(echo "$load_avg * 25" | bc -l | cut -d'.' -f1)
+                else
+                    cpu_usage=0
+                fi
+            fi
+        else
+            # 如果没有 top 命令，使用其他方法
             if command -v vmstat &> /dev/null; then
                 cpu_usage=$(vmstat 1 2 | tail -1 | awk '{print 100-$15}')
-            # 方法3: 使用 /proc/loadavg 估算
             elif [ -f /proc/loadavg ]; then
                 local load_avg
                 load_avg=$(cat /proc/loadavg | awk '{print $1}')
@@ -99,17 +122,6 @@ get_cpu_usage() {
             else
                 cpu_usage=0
             fi
-        fi
-    else
-        # 如果没有 top 命令，使用其他方法
-        if command -v vmstat &> /dev/null; then
-            cpu_usage=$(vmstat 1 2 | tail -1 | awk '{print 100-$15}')
-        elif [ -f /proc/loadavg ]; then
-            local load_avg
-            load_avg=$(cat /proc/loadavg | awk '{print $1}')
-            cpu_usage=$(echo "$load_avg * 25" | bc -l | cut -d'.' -f1)
-        else
-            cpu_usage=0
         fi
     fi
     
@@ -271,8 +283,19 @@ check_disk_space() {
     local min_space_gb=5  # 最小需要5GB空间
     local available_space_gb
     
-    # 获取当前目录可用空间（GB）
-    available_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+    # 检测操作系统类型并使用相应的命令
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS 系统
+        available_space_gb=$(df -g . | awk 'NR==2 {print $4}')
+    else
+        # Linux 系统
+        available_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+    fi
+    
+    # 确保获取到有效数字
+    if [[ ! "$available_space_gb" =~ ^[0-9]+$ ]]; then
+        error "无法获取磁盘空间信息"
+    fi
     
     if [ "$available_space_gb" -lt "$min_space_gb" ]; then
         error "磁盘空间不足！可用空间: ${available_space_gb}GB，需要至少: ${min_space_gb}GB"
@@ -288,7 +311,21 @@ rotate_log() {
     
     if [ -f "$log_file" ]; then
         local size_mb
-        size_mb=$(du -m "$log_file" | cut -f1)
+        
+        # 检测操作系统类型并使用相应的命令
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS 系统
+            size_mb=$(du -m "$log_file" | cut -f1)
+        else
+            # Linux 系统
+            size_mb=$(du -m "$log_file" | cut -f1)
+        fi
+        
+        # 确保获取到有效数字
+        if [[ ! "$size_mb" =~ ^[0-9]+$ ]]; then
+            info "⚠️ 无法获取日志文件大小，跳过轮转"
+            return
+        fi
         
         if [ "$size_mb" -gt "$max_size_mb" ]; then
             local backup_file="${log_file}.$(date +%Y%m%d_%H%M%S)"
