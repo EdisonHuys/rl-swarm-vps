@@ -34,9 +34,9 @@ check_docker() {
 # 打开 Docker
 start_docker() {
     info "正在启动 Docker..."
-    if ! open -a Docker; then
-        error "无法启动 Docker 应用，请检查 Docker 是否安装或手动启动"
-    fi
+        if ! open -a Docker; then
+            error "无法启动 Docker 应用，请检查 Docker 是否安装或手动启动"
+        fi
     # 等待 Docker 启动
     info "等待 Docker 启动完成..."
     sleep 10
