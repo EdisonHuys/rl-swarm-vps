@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-log_file="./deploy_rl_swarm_vps.log"
+log_file="/tmp/deploy_rl_swarm_vps.log"
 max_retries=10
 retry_count=0
 
@@ -12,17 +12,32 @@ LOW_CPU_DURATION=1800   # 低CPU持续时间（秒，30分钟 = 1800秒）
 CONTAINER_NAME="swarm-cpu"
 
 info() {
-    echo -e "[$(date +"%Y-%m-%d %T")] [INFO] $*" | tee -a "$log_file"
+    # 尝试写入日志文件，如果失败则只输出到终端
+    if echo -e "[$(date +"%Y-%m-%d %T")] [INFO] $*" >> "$log_file" 2>/dev/null; then
+        echo -e "[$(date +"%Y-%m-%d %T")] [INFO] $*"
+    else
+        echo -e "[$(date +"%Y-%m-%d %T")] [INFO] $*"
+    fi
 }
 
 error() {
-    echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] $*" >&2 | tee -a "$log_file"
+    # 尝试写入日志文件，如果失败则只输出到终端
+    if echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] $*" >> "$log_file" 2>/dev/null; then
+        echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] $*" >&2
+    else
+        echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] $*" >&2
+    fi
+    
     if [ $retry_count -lt $max_retries ]; then
         retry_count=$((retry_count+1))
         info "自动重试 ($retry_count/$max_retries)..."
         exec "$0" "$@"
     else
-        echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] 达到最大重试次数 ($max_retries 次)，请手动重启 Docker 并检查环境" >&2 | tee -a "$log_file"
+        if echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] 达到最大重试次数 ($max_retries 次)，请手动重启 Docker 并检查环境" >> "$log_file" 2>/dev/null; then
+            echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] 达到最大重试次数 ($max_retries 次)，请手动重启 Docker 并检查环境" >&2
+        else
+            echo -e "[$(date +"%Y-%m-%d %T")] [ERROR] 达到最大重试次数 ($max_retries 次)，请手动重启 Docker 并检查环境" >&2
+        fi
         exit 1
     fi
 }
@@ -280,25 +295,28 @@ cleanup() {
 
 # 检查磁盘空间
 check_disk_space() {
-    local min_space_gb=5  # 最小需要5GB空间
+    local min_space_gb=1  # 降低最小空间要求到1GB
     local available_space_gb
     
     # 检测操作系统类型并使用相应的命令
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS 系统
-        available_space_gb=$(df -g . | awk 'NR==2 {print $4}')
+        available_space_gb=$(df -g . | awk 'NR==2 {print $4}' 2>/dev/null || echo "0")
     else
         # Linux 系统
-        available_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+        available_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//' 2>/dev/null || echo "0")
     fi
     
     # 确保获取到有效数字
     if [[ ! "$available_space_gb" =~ ^[0-9]+$ ]]; then
-        error "无法获取磁盘空间信息"
+        info "⚠️ 无法获取磁盘空间信息，继续运行..."
+        return 0
     fi
     
     if [ "$available_space_gb" -lt "$min_space_gb" ]; then
-        error "磁盘空间不足！可用空间: ${available_space_gb}GB，需要至少: ${min_space_gb}GB"
+        info "⚠️ 磁盘空间不足！可用空间: ${available_space_gb}GB，建议至少: ${min_space_gb}GB"
+        info "💡 建议清理磁盘空间后再运行，但脚本将继续尝试..."
+        return 0
     fi
     
     info "✅ 磁盘空间检查通过，可用空间: ${available_space_gb}GB"
@@ -307,7 +325,7 @@ check_disk_space() {
 # 日志轮转
 rotate_log() {
     local log_file="$1"
-    local max_size_mb=100  # 最大100MB
+    local max_size_mb=50  # 降低最大日志文件大小到50MB
     
     if [ -f "$log_file" ]; then
         local size_mb
@@ -315,10 +333,10 @@ rotate_log() {
         # 检测操作系统类型并使用相应的命令
         if [[ "$OSTYPE" == "darwin"* ]]; then
             # macOS 系统
-            size_mb=$(du -m "$log_file" | cut -f1)
+            size_mb=$(du -m "$log_file" 2>/dev/null | cut -f1 || echo "0")
         else
             # Linux 系统
-            size_mb=$(du -m "$log_file" | cut -f1)
+            size_mb=$(du -m "$log_file" 2>/dev/null | cut -f1 || echo "0")
         fi
         
         # 确保获取到有效数字
@@ -329,17 +347,22 @@ rotate_log() {
         
         if [ "$size_mb" -gt "$max_size_mb" ]; then
             local backup_file="${log_file}.$(date +%Y%m%d_%H%M%S)"
-            mv "$log_file" "$backup_file"
-            info "📄 日志文件过大 (${size_mb}MB)，已轮转到: $backup_file"
+            if mv "$log_file" "$backup_file" 2>/dev/null; then
+                info "📄 日志文件过大 (${size_mb}MB)，已轮转到: $backup_file"
+            else
+                info "⚠️ 无法轮转日志文件，继续使用现有文件"
+            fi
         fi
     fi
 }
+
 
 # 主逻辑
 main() {
     # 设置信号处理
     trap cleanup SIGINT SIGTERM
-    
+
+
     # 日志轮转
     rotate_log "$log_file"
     
