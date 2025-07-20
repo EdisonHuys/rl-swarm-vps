@@ -215,24 +215,9 @@ monitor_cpu() {
 # 打开 Docker（仅适用于 macOS）
 start_docker() {
     info "正在启动 Docker..."
-<<<<<<< HEAD
         if ! open -a Docker; then
             error "无法启动 Docker 应用，请检查 Docker 是否安装或手动启动"
         fi
-=======
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if ! open -a Docker; then
-            error "无法启动 Docker 应用，请检查 Docker 是否安装或手动启动"
-        fi
-    else
-        # Linux 系统通常 Docker 作为服务运行
-        if ! systemctl is-active --quiet docker; then
-            info "启动 Docker 服务..."
-            sudo systemctl start docker || error "无法启动 Docker 服务"
-        fi
-    fi
-    
->>>>>>> 9dd50805748b505a8ac839eb3fa492b5ff6ac740
     # 等待 Docker 启动
     info "等待 Docker 启动完成..."
     sleep 10
