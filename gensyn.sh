@@ -266,10 +266,45 @@ cleanup() {
     exit 0
 }
 
+# 检查磁盘空间
+check_disk_space() {
+    local min_space_gb=5  # 最小需要5GB空间
+    local available_space_gb
+    
+    # 获取当前目录可用空间（GB）
+    available_space_gb=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
+    
+    if [ "$available_space_gb" -lt "$min_space_gb" ]; then
+        error "磁盘空间不足！可用空间: ${available_space_gb}GB，需要至少: ${min_space_gb}GB"
+    fi
+    
+    info "✅ 磁盘空间检查通过，可用空间: ${available_space_gb}GB"
+}
+
+# 日志轮转
+rotate_log() {
+    local log_file="$1"
+    local max_size_mb=100  # 最大100MB
+    
+    if [ -f "$log_file" ]; then
+        local size_mb
+        size_mb=$(du -m "$log_file" | cut -f1)
+        
+        if [ "$size_mb" -gt "$max_size_mb" ]; then
+            local backup_file="${log_file}.$(date +%Y%m%d_%H%M%S)"
+            mv "$log_file" "$backup_file"
+            info "📄 日志文件过大 (${size_mb}MB)，已轮转到: $backup_file"
+        fi
+    fi
+}
+
 # 主逻辑
 main() {
     # 设置信号处理
     trap cleanup SIGINT SIGTERM
+    
+    # 日志轮转
+    rotate_log "$log_file"
     
     # 检查 Docker 环境
     check_docker
@@ -279,6 +314,9 @@ main() {
 
     # 启动 Docker
     start_docker
+
+    # 检查磁盘空间
+    check_disk_space
 
     # 进入目录
     info "进入 rl-swarm-vps 目录..."
