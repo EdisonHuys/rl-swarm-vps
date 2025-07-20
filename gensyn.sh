@@ -150,12 +150,54 @@ get_cpu_usage() {
 
 # 检查容器是否运行
 is_container_running() {
-    docker ps --format "table {{.Names}}" | grep -q "^${CONTAINER_NAME}$"
+    # 使用更准确的容器状态检查
+    local container_status
+    container_status=$(docker ps --format "table {{.Names}}\t{{.Status}}" | grep "^${CONTAINER_NAME}" | awk '{print $2}' 2>/dev/null || echo "")
+    
+    # 检查容器是否存在且状态正常
+    if [[ -n "$container_status" ]] && [[ "$container_status" != "Exited" ]]; then
+        return 0  # 容器正在运行
+    else
+        return 1  # 容器未运行或已退出
+    fi
+}
+
+# 等待容器启动完成
+wait_for_container() {
+    local max_wait_time=120  # 最大等待时间（秒）
+    local wait_interval=5    # 检查间隔（秒）
+    local elapsed_time=0
+    
+    info "⏳ 等待容器启动完成..."
+    
+    while [ $elapsed_time -lt $max_wait_time ]; do
+        if is_container_running; then
+            # 检查容器是否真正可用（通过检查日志或健康检查）
+            if docker logs --tail 10 "${CONTAINER_NAME}" 2>/dev/null | grep -q "ready\|started\|running\|listening"; then
+                info "✅ 容器启动完成并正常运行"
+                return 0
+            fi
+        fi
+        
+        sleep $wait_interval
+        elapsed_time=$((elapsed_time + wait_interval))
+        info "⏳ 等待容器启动... (${elapsed_time}/${max_wait_time}秒)"
+    done
+    
+    info "⚠️ 容器启动超时，但继续监控..."
+    return 1
 }
 
 # 重启容器
 restart_container() {
     info "🔄 检测到CPU使用率持续低于${CPU_THRESHOLD}%，重启容器..."
+    
+    # 设置必要的环境变量
+    export HF_TOKEN=""
+    export GENSYN_RESET_CONFIG="true"
+    export DOCKER="true"
+    export CPU_ONLY="1"
+    export CONNECT_TO_TESTNET="true"
     
     # 停止当前容器
     if is_container_running; then
@@ -168,6 +210,8 @@ restart_container() {
     info "重新构建并启动容器..."
     if docker-compose build $CONTAINER_NAME && docker-compose --profile swarm up -d $CONTAINER_NAME; then
         info "✅ 容器重启成功"
+        # 等待容器启动完成
+        wait_for_container
         return 0
     else
         error "❌ 容器重启失败"
@@ -182,13 +226,27 @@ monitor_cpu() {
     
     local low_cpu_start_time=""
     local current_time
+    local container_start_time=$(date +%s)
+    local min_runtime=300  # 容器最少运行5分钟才开始CPU监控
     
     while true; do
         # 检查容器是否在运行
         if ! is_container_running; then
             info "⚠️ 容器未运行，尝试重启..."
             restart_container
+            container_start_time=$(date +%s)  # 重置容器启动时间
             sleep 30
+            continue
+        fi
+        
+        # 检查容器是否运行足够长时间才开始CPU监控
+        current_time=$(date +%s)
+        local container_runtime=$((current_time - container_start_time))
+        
+        if [ $container_runtime -lt $min_runtime ]; then
+            local remaining_wait=$((min_runtime - container_runtime))
+            info "⏳ 容器刚启动，等待${remaining_wait}秒后开始CPU监控..."
+            sleep $MONITOR_INTERVAL
             continue
         fi
         
@@ -224,6 +282,7 @@ monitor_cpu() {
                     info "🚨 CPU使用率已持续${LOW_CPU_DURATION}秒低于${CPU_THRESHOLD}%，触发重启"
                     restart_container
                     low_cpu_start_time=""  # 重置计时器
+                    container_start_time=$(date +%s)  # 重置容器启动时间
                     sleep 60  # 重启后等待1分钟再继续监控
                 fi
             fi
@@ -268,6 +327,14 @@ start_docker() {
 run_docker_compose() {
     local attempt=1
     local max_attempts=$max_retries
+    
+    # 设置必要的环境变量
+    export HF_TOKEN=""
+    export GENSYN_RESET_CONFIG="true"
+    export DOCKER="true"
+    export CPU_ONLY="1"
+    export CONNECT_TO_TESTNET="true"
+    
     while [ $attempt -le $max_attempts ]; do
         info "尝试运行容器 $CONTAINER_NAME (第 $attempt 次)..."
         if docker-compose build $CONTAINER_NAME && docker-compose --profile swarm up -d $CONTAINER_NAME; then
@@ -387,8 +454,7 @@ main() {
     run_docker_compose
     
     # 等待容器完全启动
-    info "⏳ 等待容器完全启动..."
-    sleep 30
+    wait_for_container
     
     # 开始CPU监控
     monitor_cpu
