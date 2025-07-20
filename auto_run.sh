@@ -61,22 +61,88 @@ cleanup() {
 
 # 检查进程是否运行
 is_process_running() {
+    # 方法1: 检查PID文件中的进程
     if [ -f "$PID_FILE" ]; then
         local pid
-        pid=$(cat "$PID_FILE")
-        if ps -p "$pid" > /dev/null 2>&1; then
-            return 0  # 进程存在
+        pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+        if [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1; then
+            # 检查进程是否真的在运行（不是僵尸进程）
+            local process_state
+            process_state=$(ps -o state= -p "$pid" 2>/dev/null || echo "")
+            if [[ "$process_state" != "Z" ]]; then
+                return 0  # 进程存在且正常运行
+            fi
         fi
     fi
+    
+    # 方法2: 检查关键进程名称
     if pgrep -f "swarm_launcher.py" > /dev/null 2>&1; then
         return 0  # swarm_launcher.py 进程存在
     fi
+    
+    # 方法3: 检查Python训练相关进程
+    if pgrep -f "python.*train" > /dev/null 2>&1; then
+        return 0  # Python训练进程存在
+    fi
+    
+    # 方法4: 检查Docker容器中的训练进程
+    if docker ps --format "table {{.Names}}\t{{.Status}}" | grep -q "swarm-cpu.*Up"; then
+        # 检查容器内是否有训练进程
+        if docker exec swarm-cpu pgrep -f "swarm_launcher.py" > /dev/null 2>&1; then
+            return 0  # 容器内训练进程存在
+        fi
+    fi
+    
     return 1  # 进程不存在
+}
+
+# 检查训练进程是否健康
+is_training_healthy() {
+    # 检查日志文件是否有错误信息
+    if [ -f "$LOG_FILE" ]; then
+        # 检查最近5分钟是否有严重错误
+        local recent_errors
+        recent_errors=$(tail -n 100 "$LOG_FILE" 2>/dev/null | grep -i "error\|exception\|traceback\|failed\|killed" | wc -l)
+        
+        if [ "$recent_errors" -gt 5 ]; then
+            echo_yellow "⚠️ 检测到大量错误信息，训练可能异常"
+            return 1
+        fi
+    fi
+    
+    # 检查进程是否响应（通过发送信号0）
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+        if [[ -n "$pid" ]]; then
+            if ! kill -0 "$pid" 2>/dev/null; then
+                echo_yellow "⚠️ 进程PID $pid 无响应"
+                return 1
+            fi
+        fi
+    fi
+    
+    return 0  # 训练进程健康
 }
 
 # 启动训练进程
 start_training() {
     echo_blue "🚀 启动 RL Swarm 训练 (Docker 环境)..."
+    
+    # 清理可能存在的旧PID文件
+    if [ -f "$PID_FILE" ]; then
+        local old_pid
+        old_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+        if [[ -n "$old_pid" ]] && ps -p "$old_pid" > /dev/null 2>&1; then
+            echo_yellow "🛑 终止旧进程 PID: $old_pid"
+            kill -TERM "$old_pid" 2>/dev/null || true
+            sleep 3
+            if ps -p "$old_pid" > /dev/null 2>&1; then
+                kill -KILL "$old_pid" 2>/dev/null || true
+            fi
+        fi
+        rm -f "$PID_FILE"
+    fi
     
     # 设置环境变量（与 Dockerfile 和 run_rl_swarm.sh 一致）
     #export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
@@ -99,18 +165,38 @@ start_training() {
     
     # 尝试启动 run_rl_swarm.sh，最多重试 3 次
     for i in {1..3}; do
+        echo_blue "🔄 尝试启动训练进程 (第 $i 次)..."
+        
+        # 启动进程并捕获PID
         ./run_rl_swarm.sh 2>&1 | tee -a "$LOG_FILE" &
         local pid=$!
         echo "$pid" > "$PID_FILE"
         echo_green "✅ 训练进程已启动，PID: $pid"
+        
+        # 等待进程稳定
         sleep 15
+        
+        # 验证进程是否真的在运行
         if ps -p "$pid" > /dev/null 2>&1; then
-            return 0  # 启动成功
+            # 检查进程状态
+            local process_state
+            process_state=$(ps -o state= -p "$pid" 2>/dev/null || echo "")
+            
+            if [[ "$process_state" != "Z" ]]; then
+                echo_green "✅ 训练进程启动成功，状态: $process_state"
+                return 0  # 启动成功
+            else
+                echo_red "❌ 进程已变为僵尸状态"
+            fi
+        else
+            echo_red "❌ 进程PID $pid 不存在"
         fi
+        
         echo_red "❌ 训练进程启动失败，重试 $i/3"
         rm -f "$PID_FILE"
         sleep 5
     done
+    
     echo_red "❌ 训练进程启动失败，达到最大重试次数"
     return 1
 }
@@ -124,6 +210,7 @@ main() {
     check_log_file
     
     local restart_count=0
+    local health_check_count=0
     echo_green "🎯 RL Swarm 自动监控启动 (Docker 环境)"
     echo_blue "⏱️ 检查间隔: ${CHECK_INTERVAL}秒"
     echo_blue "⏰ 重启延迟: ${RESTART_DELAY}秒"
@@ -132,8 +219,11 @@ main() {
         echo_red "❌ 初始启动失败"
         exit 1
     fi
+    
     while true; do
         sleep "$CHECK_INTERVAL"
+        
+        # 检查进程是否运行
         if ! is_process_running; then
             echo_yellow "⚠️ 检测到训练进程已结束"
             restart_count=$((restart_count + 1))
@@ -142,8 +232,31 @@ main() {
             sleep "$RESTART_DELAY"
             if start_training; then
                 echo_green "✅ 第 $restart_count 次重启成功"
+                health_check_count=0  # 重置健康检查计数
             else
                 echo_red "❌ 第 $restart_count 次重启失败，将继续尝试"
+            fi
+        else
+            # 进程在运行，检查是否健康
+            health_check_count=$((health_check_count + 1))
+            
+            # 每10次检查（约100秒）进行一次健康检查
+            if [ $((health_check_count % 10)) -eq 0 ]; then
+                if ! is_training_healthy; then
+                    echo_yellow "⚠️ 训练进程可能异常，准备重启"
+                    restart_count=$((restart_count + 1))
+                    echo_yellow "🔄 准备第 $restart_count 次重启（健康检查触发）"
+                    echo_yellow "⏰ 等待 $RESTART_DELAY 秒后重启..."
+                    sleep "$RESTART_DELAY"
+                    if start_training; then
+                        echo_green "✅ 第 $restart_count 次重启成功"
+                        health_check_count=0  # 重置健康检查计数
+                    else
+                        echo_red "❌ 第 $restart_count 次重启失败，将继续尝试"
+                    fi
+                else
+                    echo_blue "✅ 训练进程运行正常 (健康检查 #$((health_check_count / 10)))"
+                fi
             fi
         fi
     done
