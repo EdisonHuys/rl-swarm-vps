@@ -335,6 +335,16 @@ run_docker_compose() {
     export CPU_ONLY="1"
     export CONNECT_TO_TESTNET="true"
     
+    # 尝试拉取基础镜像
+    info "🔍 检查基础镜像..."
+    if ! docker pull registry.cn-hangzhou.aliyuncs.com/library/ubuntu:24.04 2>/dev/null; then
+        info "⚠️ 无法拉取阿里云镜像，尝试官方镜像..."
+        if ! docker pull ubuntu:24.04 2>/dev/null; then
+            info "⚠️ 无法拉取官方镜像，尝试其他镜像源..."
+            docker pull docker.mirrors.ustc.edu.cn/library/ubuntu:24.04 2>/dev/null || true
+        fi
+    fi
+    
     while [ $attempt -le $max_attempts ]; do
         info "尝试运行容器 $CONTAINER_NAME (第 $attempt 次)..."
         if docker-compose build $CONTAINER_NAME && docker-compose --profile swarm up -d $CONTAINER_NAME; then
@@ -342,7 +352,7 @@ run_docker_compose() {
             return 0
         else
             info "Docker 构建失败，重试中..."
-            sleep 2
+            sleep 5  # 增加重试间隔
             ((attempt++))
         fi
     done
