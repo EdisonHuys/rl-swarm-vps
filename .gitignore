@@ -18,6 +18,7 @@ web/ui/dist/
 /bazel-*
 /external
 /tmp
+deploy_rl-swarm-vps.log
 
 dist/
 MODULE.bazel.lock
