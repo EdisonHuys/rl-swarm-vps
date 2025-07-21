@@ -23,6 +23,7 @@ dist/
 MODULE.bazel.lock
 **/.direnv
 .tmux.conf
+deploy_rl-swarm-vps.log
 
 user/
 user/keys/
