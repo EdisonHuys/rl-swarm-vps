@@ -4,7 +4,7 @@ set -euo pipefail
 
 # 配置参数
 RESTART_DELAY=30                  # 重启延迟时间（秒）
-CHECK_INTERVAL=10                 # 检查间隔时间（秒）
+CHECK_INTERVAL=480                 # 检查间隔时间（秒）
 LOG_FILE="${HOME}/rl-swarm-vps/logs/auto_monitor.log"  # 日志文件路径
 PID_FILE="/home/gensyn/rl_swarm/training.pid"           # 进程 PID 文件路径
 
@@ -214,6 +214,7 @@ main() {
     echo_green "🎯 RL Swarm 自动监控启动 (Docker 环境)"
     echo_blue "⏱️ 检查间隔: ${CHECK_INTERVAL}秒"
     echo_blue "⏰ 重启延迟: ${RESTART_DELAY}秒"
+    echo_blue "🎯 防止报错假死"
     echo ""
     if ! start_training; then
         echo_red "❌ 初始启动失败"
@@ -240,8 +241,8 @@ main() {
             # 进程在运行，检查是否健康
             health_check_count=$((health_check_count + 1))
             
-            # 每10次检查（约100秒）进行一次健康检查
-            if [ $((health_check_count % 10)) -eq 0 ]; then
+            # 每1次检查进行一次健康检查
+            if [ $((health_check_count % 1)) -eq 0 ]; then
                 if ! is_training_healthy; then
                     echo_yellow "⚠️ 训练进程可能异常，准备重启"
                     restart_count=$((restart_count + 1))
