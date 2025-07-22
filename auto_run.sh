@@ -66,7 +66,13 @@ is_process_running() {
         local pid
         pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
         if [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1; then
-            # 检查进程是否真的在运行（不是僵尸进程）
+            # 检查该进程的子进程是否有 python
+            if ! pgrep -P "$pid" -f "python" > /dev/null 2>&1; then
+                # 没有python子进程，说明训练已死
+                echo_yellow "⚠️ 检测到主shell进程还在但python训练进程已退出，需重启"
+                return 1
+            fi
+            # 检查进程是否为僵尸
             local process_state
             process_state=$(ps -o state= -p "$pid" 2>/dev/null || echo "")
             if [[ "$process_state" != "Z" ]]; then
