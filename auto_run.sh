@@ -1,153 +1,184 @@
 #!/bin/bash
 
-set -euo pipefail
+export WANDB_MODE=disabled
+export WANDB_MODE=offline
+export WANDB_DISABLED=true
+export WANDB_SILENT=true
+export WANDB_CONSOLE=off
 
-# 配置参数
-RESTART_DELAY=30                  # 重启延迟时间（秒）
-CHECK_INTERVAL=10                 # 检查间隔时间（秒）
-LOG_FILE="${HOME}/rl-swarm-vps/logs/auto_monitor.log"  # 日志文件路径
-PID_FILE="/home/gensyn/rl_swarm/training.pid"           # 进程 PID 文件路径
 
-# 颜色输出设置
-GREEN="\033[32m"                  # 绿色，用于成功信息
-BLUE="\033[34m"                   # 蓝色，用于普通信息
-RED="\033[31m"                    # 红色，用于错误信息
-YELLOW="\033[33m"                 # 黄色，用于警告信息
-RESET="\033[0m"                   # 重置颜色
+MAX_RETRIES=1000000
+WARNING_THRESHOLD=10
+RETRY_COUNT=0
 
-# 检查日志文件路径是否可写
-check_log_file() {
-    local log_dir
-    log_dir=$(dirname "$LOG_FILE")
-    if ! mkdir -p "$log_dir" 2>/dev/null || ! touch "$LOG_FILE" 2>/dev/null; then
-        echo -e "${RED}❌ 日志文件路径 $LOG_FILE 不可写，仅输出到终端${RESET}"
-        LOG_FILE="/dev/null"  # 如果不可写，仅输出到终端
-    fi
+# ====== 📝 带时间戳的日志函数 ======
+log() {
+  echo "【📅 $(date '+%Y-%m-%d %H:%M:%S')】 $1"
 }
 
-# 重要信息日志（同时输出到终端和日志文件，非缓冲）
-log_important() {
-    stdbuf -oL echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
-}
-
-# 颜色输出函数（使用 stdbuf 确保非缓冲输出）
-echo_green() { echo -e "${GREEN}$1${RESET}" | tee -a "$LOG_FILE"; }
-echo_blue() { echo -e "${BLUE}$1${RESET}" | tee -a "$LOG_FILE"; }
-echo_red() { echo -e "${RED}$1${RESET}" | tee -a "$LOG_FILE"; log_important "$1"; }
-echo_yellow() { echo -e "${YELLOW}$1${RESET}" | tee -a "$LOG_FILE"; log_important "$1"; }
-
-# 清理函数：处理脚本退出时的清理工作
+# ====== 🛑 处理 Ctrl+C 退出信号 ======
 cleanup() {
-    echo_yellow "🛑 清理"
-    if [ -f "$PID_FILE" ]; then
-        local pid
-        pid=$(cat "$PID_FILE")
-        if ps -p "$pid" > /dev/null 2>&1; then
-            echo_yellow "终止训练进程 PID: $pid"
-            kill -TERM "$pid" 2>/dev/null || true
-            sleep 5
-            if ps -p "$pid" > /dev/null 2>&1; then
-                kill -KILL "$pid" 2>/dev/null || true
-            fi
-        fi
-        rm -f "$PID_FILE"
-    fi
-    pkill -f "swarm_launcher.py" 2>/dev/null || true
-    pkill -f "run_rl_swarm.sh" 2>/dev/null || true
-    pkill -f "yarn start" 2>/dev/null || true
-    echo_green "✅ 已停止"
+  local mode=$1  # "exit" 或 "restart"
+  log "🛑 触发清理流程（模式: $mode）..."
+  # 杀主进程
+  if [ -n "$RL_PID" ] && kill -0 "$RL_PID" 2>/dev/null; then
+    log "🧨 杀死主进程 PID: $RL_PID"
+    kill -9 "$RL_PID" 2>/dev/null
+  fi
+  # 杀子进程
+  if [ -n "$PY_PID" ] && kill -0 "$PY_PID" 2>/dev/null; then
+    log "⚔️ 杀死 Python 子进程 PID: $PY_PID"
+    kill -9 "$PY_PID" 2>/dev/null
+  fi
+  # 释放端口 3000
+  log "🌐 检查并释放端口 3000..."
+  PORT_PID=$(lsof -ti:3000)
+  if [ -n "$PORT_PID" ]; then
+    log "⚠️ 端口 3000 被 PID $PORT_PID 占用，正在释放..."
+    kill -9 "$PORT_PID" 2>/dev/null
+    log "✅ 端口 3000 已释放"
+  else
+    log "✅ 端口 3000 已空闲"
+  fi
+  # 清理所有相关 python 进程
+  log "🧨 清理所有相关 python 进程..."
+  pgrep -f "python.*swarm_launcher" | while read pid; do
+    log "⚔️ 杀死 python.swarm_launcher 进程 PID: $pid"
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  pgrep -f "python.*run_rl_swarm" | while read pid; do
+    log "⚔️ 杀死 python.run_rl_swarm 进程 PID: $pid"
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  pgrep -af python | grep Resources | awk '{print $1}' | while read pid; do
+    log "⚔️ 杀死 python+Resources 进程 PID: $pid"
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  log "🛑 清理完成"
+  if [ "$mode" = "exit" ]; then
     exit 0
+  fi
 }
 
-# 检查进程是否运行
-is_process_running() {
-    if [ -f "$PID_FILE" ]; then
-        local pid
-        pid=$(cat "$PID_FILE")
-        if ps -p "$pid" > /dev/null 2>&1; then
-            return 0  # 进程存在
-        fi
+# 绑定 Ctrl+C 信号到 cleanup 函数（退出模式）
+trap 'cleanup exit' SIGINT
+
+# ====== Peer ID 查询并写入桌面函数 ======
+query_and_save_peerid_info() {
+  local peer_id="$1"
+  local desktop_path=~/Desktop/peerid_info.txt
+  local output
+  output=$(.venv/bin/python ./gensyncheck.py "$peer_id" | tee -a "$desktop_path")
+  if echo "$output" | grep -q "__NEED_RESTART__"; then
+    log "⚠️ 超过4小时未有新交易，自动重启！"
+    cleanup restart
+  fi
+  log "✅ 已尝试查询 Peer ID 合约参数，结果已追加写入桌面: $desktop_path"
+}
+
+
+# ====== 🔁 主循环：启动和监控 RL Swarm ======
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  log "🚀 第 $((RETRY_COUNT + 1)) 次尝试：启动 RL Swarm..."
+
+  # ✅ 设置 MPS 环境（适用于 Mac M1/M2）
+  export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+  export PYTORCH_ENABLE_MPS_FALLBACK=1
+  source ~/.zshrc 2>/dev/null || true
+
+  # ✅ 检查并杀死残留的 p2pd 进程
+  if pgrep -x "p2pd" >/dev/null; then
+    log "🔍 发现残留的 p2pd 进程，正在终止..."
+    pkill -9 p2pd
+    log "✅ p2pd 进程已终止"
+  fi
+
+  # ✅ 在后台启动主脚本并自动输入空值
+  WANDB_MODE=disabled ./run_rl_swarm.sh &
+  RL_PID=$!
+
+  # ✅ 循环检测 Python 子进程初始化
+  sleep 300
+  PY_PID=$(pgrep -P $RL_PID -f python | head -n 1)
+
+  if [ -z "$PY_PID" ]; then
+    log "⚠️ No Python subprocess found. Likely failed to start."
+  else
+    log "✅ Python subprocess detected. PID: $PY_PID"
+  fi
+
+  # ====== 检测并保存 Peer ID ======
+  PEERID_LOG="logs/swarm_launcher.log"
+  PEERID_FILE="peerid.txt"
+  # 启动时不再主动检测和保存 PeerID，延后到定时任务中
+
+  # ✅ 监控子进程
+  DISK_LIMIT_GB=20 # 你设定的磁盘阈值（单位：GB）
+  MEM_CHECK_INTERVAL=600  # 检查间隔（秒），10分钟
+
+  MEM_CHECK_TIMER=0
+  PEERID_LOG="logs/swarm_launcher.log"
+  PEERID_FILE="peerid.txt"
+  PEER_ID_FOUND=0
+  PEERID_QUERY_INTERVAL=10800  # 3小时=10800秒
+  PEERID_QUERY_TIMER=0
+  FIRST_QUERY_DONE=0
+
+  while [ -n "$PY_PID" ] && kill -0 "$PY_PID" >/dev/null 2>&1; do
+    sleep 2
+    MEM_CHECK_TIMER=$((MEM_CHECK_TIMER + 2))
+    PEERID_QUERY_TIMER=$((PEERID_QUERY_TIMER + 2))
+    if [ $MEM_CHECK_TIMER -ge $MEM_CHECK_INTERVAL ]; then
+      MEM_CHECK_TIMER=0
+      # 检测磁盘空间，适配 macOS 和 Ubuntu
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        FREE_GB=$(df -g / | awk 'NR==2 {print $4}')
+      else
+        # Linux/Ubuntu
+        FREE_GB=$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
+      fi
+      log "🔍 检测到磁盘剩余空间 ${FREE_GB}GB"
+      if [ "$FREE_GB" -lt "$DISK_LIMIT_GB" ]; then
+        log "🚨 磁盘空间不足（${FREE_GB}GB < ${DISK_LIMIT_GB}GB），自动重启！"
+        cleanup restart
+        break
+      fi
     fi
-    if pgrep -f "swarm_launcher.py" > /dev/null 2>&1; then
-        return 0  # swarm_launcher.py 进程存在
-    fi
-    return 1  # 进程不存在
-}
 
-# 启动训练进程
-start_training() {
-    echo_blue "🚀 启动 RL Swarm 训练 (Docker 环境)..."
-    
-    # 设置环境变量（与 Dockerfile 和 run_rl_swarm.sh 一致）
-    #export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
-    export OMP_NUM_THREADS=6
-    export MKL_NUM_THREADS=6
-    #export PYTORCH_ENABLE_MPS_FALLBACK=1
-    #export CPU_ONLY=1
-    #export HF_HUB_DOWNLOAD_TIMEOUT=300
-    export HF_DATASETS_CACHE="/home/gensyn/rl_swarm/.cache/huggingface/datasets"
-    export HF_MODELS_CACHE="/home/gensyn/rl_swarm/.cache/huggingface/transformers"
-    export CONNECT_TO_TESTNET=true
-    export SWARM_CONTRACT="0xFaD7C5e93f28257429569B854151A1B8DCD404c2"
-    export HUGGINGFACE_ACCESS_TOKEN="None"
-    export GENSYN_RESET_CONFIG=""
-    export WANDB_MODE=disabled
-    
-    # 确保缓存目录存在并设置权限
-    mkdir -p "$HF_DATASETS_CACHE" "$HF_MODELS_CACHE"
-    chmod -R 777 "$HF_DATASETS_CACHE" "$HF_MODELS_CACHE"
-    
-    # 尝试启动 run_rl_swarm.sh，最多重试 3 次
-    for i in {1..3}; do
-        ./run_rl_swarm.sh 2>&1 | tee -a "$LOG_FILE" &
-        local pid=$!
-        echo "$pid" > "$PID_FILE"
-        echo_green "✅ 训练进程已启动，PID: $pid"
-        sleep 15
-        if ps -p "$pid" > /dev/null 2>&1; then
-            return 0  # 启动成功
+    # 每3小时检测一次PeerID并查询参数和链上信息
+    if [ $PEERID_QUERY_TIMER -ge $PEERID_QUERY_INTERVAL ]; then
+      # 检测并保存PeerID
+      if [ -f "$PEERID_LOG" ]; then
+        PEER_ID=$(grep "Peer ID" "$PEERID_LOG" | sed -n 's/.*Peer ID \[\(.*\)\].*/\1/p' | tail -n1)
+        if [ -n "$PEER_ID" ]; then
+          echo "$PEER_ID" > "$PEERID_FILE"
+          log "✅ 已检测并保存 Peer ID: $PEER_ID"
+        else
+          log "⏳ 未检测到 Peer ID，本轮跳过参数和链上查询..."
+          continue
         fi
-        echo_red "❌ 训练进程启动失败，重试 $i/3"
-        rm -f "$PID_FILE"
-        sleep 5
-    done
-    echo_red "❌ 训练进程启动失败，达到最大重试次数"
-    return 1
-}
-
-# 信号处理：捕获 SIGINT 和 SIGTERM 信号以进行清理
-trap cleanup SIGINT SIGTERM
-
-# 主监控循环
-main() {
-    # 检查日志文件路径
-    check_log_file
-    
-    local restart_count=0
-    echo_green "🎯 RL Swarm 自动监控启动 (Docker 环境)"
-    echo_blue "⏱️ 检查间隔: ${CHECK_INTERVAL}秒"
-    echo_blue "⏰ 重启延迟: ${RESTART_DELAY}秒"
-    echo ""
-    if ! start_training; then
-        echo_red "❌ 初始启动失败"
-        exit 1
+      else
+        log "⏳ 未检测到 Peer ID 日志文件，本轮跳过参数和链上查询..."
+        continue
+      fi
+      query_and_save_peerid_info "$PEER_ID"
+      FIRST_QUERY_DONE=1
+      PEERID_QUERY_TIMER=0
     fi
-    while true; do
-        sleep "$CHECK_INTERVAL"
-        if ! is_process_running; then
-            echo_yellow "⚠️ 检测到训练进程已结束"
-            restart_count=$((restart_count + 1))
-            echo_yellow "🔄 准备第 $restart_count 次重启"
-            echo_yellow "⏰ 等待 $RESTART_DELAY 秒后重启..."
-            sleep "$RESTART_DELAY"
-            if start_training; then
-                echo_green "✅ 第 $restart_count 次重启成功"
-            else
-                echo_red "❌ 第 $restart_count 次重启失败，将继续尝试"
-            fi
-        fi
-    done
-}
+  done
 
-# 启动脚本
-main
+  # ✅ 清理并准备重启
+  cleanup restart
+
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+
+  if [ $RETRY_COUNT -eq $WARNING_THRESHOLD ]; then
+    log "🚨 警告：RL Swarm 已重启 $WARNING_THRESHOLD 次，请检查系统状态"
+  fi
+
+  sleep 2
+done
+
+# ❌ 达到最大重试次数
+log "🛑 已达到最大重试次数 ($MAX_RETRIES)，程序退出"
