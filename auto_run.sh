@@ -13,7 +13,7 @@ RETRY_COUNT=0
 
 # ====== 📝 带时间戳的日志函数 ======
 log() {
-  echo "【📅 $(date '+%Y-%m-%d %H:%M:%S')】 $1"
+  echo "【⏳$(date '+%Y-%m-%d %H:%M:%S')】 $1"
 }
 
 # ====== 🛑 处理 Ctrl+C 退出信号 ======
@@ -102,9 +102,9 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   PY_PID=$(pgrep -P $RL_PID -f python | head -n 1)
 
   if [ -z "$PY_PID" ]; then
-    log "⚠️ No Python subprocess found. Likely failed to start."
+    log "⚠️ 训练进程异常，自动重启！"
   else
-    log "✅ Python subprocess detected. PID: $PY_PID"
+    log "✅ 训练进程正常. PID: $PY_PID"
   fi
 
   # ====== 检测并保存 Peer ID ======
